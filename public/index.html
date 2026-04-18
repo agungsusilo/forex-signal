@@ -687,7 +687,7 @@ Return ONLY valid JSON, no markdown, no extra text:
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-20250514",
+        model:"claude-sonnet-4-5",
         max_tokens:1200,
         tools: dataSource === 'simulated' ? tools : [],
         messages:[{ role:"user", content:prompt }]
@@ -863,7 +863,7 @@ Respond ONLY with valid JSON, no markdown:
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        model:"claude-sonnet-4-20250514",
+        model:"claude-sonnet-4-5",
         max_tokens:4096,
         tools: tdApiKey ? [] : [{type:"web_search_20250305",name:"web_search"}],
         messages:[{role:"user",content:prompt}]
