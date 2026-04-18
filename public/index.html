@@ -45,8 +45,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 0
 .api-link{font-size:11px;color:var(--gold);text-decoration:none;opacity:0.7;}
 .api-link:hover{opacity:1;}
 
-/* MODEL PICKER */
-.model-btn{padding:7px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all 0.2s;white-space:nowrap;}
+/* ASSET SELECTOR */
+.asset-selector{display:flex;gap:6px;margin-bottom:20px;}
+.asset-btn{flex:1;padding:10px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--muted);cursor:pointer;transition:all 0.2s;text-align:center;}
+.asset-btn:hover{border-color:rgba(201,168,76,0.4);color:var(--text);}
+.asset-btn.active{background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.04));border-color:var(--gold);color:var(--gold);}
+.asset-btn.btc.active{background:linear-gradient(135deg,rgba(247,147,26,0.12),rgba(247,147,26,0.04));border-color:#F7931A;color:#F7931A;}
+
+/* ASSET SELECTOR */padding:7px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all 0.2s;white-space:nowrap;}
 .model-btn:hover{border-color:rgba(201,168,76,0.4);color:var(--text);}
 .model-btn.active{background:linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.05));border-color:var(--gold);color:var(--gold);}
 .model-btn:disabled{opacity:0.35;cursor:not-allowed;}
@@ -269,6 +275,11 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
     </div>
   </div>
 
+  <div class="asset-selector">
+    <button class="asset-btn active" id="assetXAU" onclick="selectAsset('XAU/USD',this)">⚡ XAU/USD · Gold</button>
+    <button class="asset-btn btc" id="assetBTC" onclick="selectAsset('BTC/USD',this)">₿ BTC/USD · Bitcoin</button>
+  </div>
+
   <div class="tabs">
     <button class="tab active" onclick="switchTab('signal',this)">&#9889; Live Signal</button>
     <button class="tab" onclick="switchTab('backtest',this)">&#128202; Backtest &mdash; 3 Days</button>
@@ -287,8 +298,8 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
     <div class="card">
       <div class="signal-header">
         <div>
-          <div class="pair-name">XAU/USD</div>
-          <div class="pair-desc">Gold &middot; Spot &middot; 6 Timeframe Confluence</div>
+          <div class="pair-name" id="pairName">XAU/USD</div>
+          <div class="pair-desc" id="pairDesc">Gold &middot; Spot &middot; 6 Timeframe Confluence</div>
         </div>
         <div class="price-block">
           <div class="current-price" id="currentPrice">&#8212;&#8212;.&#8212;&#8212;</div>
@@ -317,7 +328,7 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
       <!-- LOADING STEPS -->
       <div class="loading-steps" id="loadingSteps">
         <div class="step-list">
-          <div class="step-item" id="step1"><div class="step-icon">1</div>Fetching live XAU/USD price from Twelve Data…</div>
+          <div class="step-item" id="step1"><div class="step-icon">1</div><span id="step1Text">Fetching live price from Twelve Data…</span></div>
           <div class="step-item" id="step2"><div class="step-icon">2</div>Loading RSI, MACD &amp; EMA indicators across 6 timeframes…</div>
           <div class="step-item" id="step3"><div class="step-icon">3</div>Sending real market data to Claude AI for analysis…</div>
           <div class="step-item" id="step4"><div class="step-icon">4</div>Generating confluence signal &amp; trade levels…</div>
@@ -377,8 +388,8 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
   <div id="tab-backtest" class="tab-panel">
     <div class="card">
       <div style="margin-bottom:24px;">
-        <div class="pair-name">BACKTEST</div>
-        <div class="pair-desc">XAU/USD &middot; Last 3 Trading Days &middot; Tight SL Strategy (4&ndash;10 pts) &middot; RR 1:2+</div>
+        <div class="pair-name" id="btPairName">BACKTEST</div>
+        <div class="pair-desc" id="btPairDesc">XAU/USD &middot; Last 3 Trading Days &middot; Tight SL Strategy (4&ndash;10 pts) &middot; RR 1:2+</div>
       </div>
 
       <div id="btProgress" style="display:none">
@@ -448,7 +459,7 @@ const ALL_MODELS = [
   { provider:'gemini',    model:'gemini-2.5-pro-preview-03-25', label:'Gemini Pro', tag:'Smart' },
   // Groq
   { provider:'groq',      model:'llama-3.3-70b-versatile',label:'Llama 3.3 70B',  tag:'Free · Fast' },
-  { provider:'groq',      model:'mixtral-8x7b-32768',     label:'Mixtral 8x7B',   tag:'Free' },
+  { provider:'groq',      model:'llama-3.1-8b-instant',   label:'Llama 3.1 8B',   tag:'Free · Fastest' },
   // OpenRouter
   { provider:'openrouter',model:'mistralai/mistral-7b-instruct:free', label:'Mistral 7B', tag:'Free' },
   { provider:'openrouter',model:'meta-llama/llama-3-8b-instruct:free',label:'Llama 3 8B', tag:'Free' },
@@ -456,11 +467,16 @@ const ALL_MODELS = [
 
 let selectedProvider = localStorage.getItem('ai_provider') || 'anthropic';
 let selectedModel    = localStorage.getItem('ai_model')    || 'claude-haiku-4-5';
+let selectedAsset    = localStorage.getItem('asset')       || 'XAU/USD';
 let serverProviders  = {}; // populated on load
 
 // ─── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   await loadProviderStatus();
+  // Restore asset selection
+  if(selectedAsset === 'BTC/USD'){
+    selectAsset('BTC/USD', document.getElementById('assetBTC'), false);
+  }
 });
 
 // ─── LOAD PROVIDER STATUS FROM SERVER ─────────────────────────────────────────
@@ -541,6 +557,31 @@ function selectModel(provider, model, btn){
   if(info) document.getElementById('pillAILabel').textContent = info.label.toUpperCase();
 }
 
+const ASSET_META = {
+  'XAU/USD': { name:'XAU/USD', desc:'Gold · Spot · 6 Timeframe Confluence',  context:'gold (XAU/USD)', slRange:'4–6', slMax:'10',  btContext:'Gold trading in ~$3200–3350 range in April 2026. Strong bullish trend.' },
+  'BTC/USD': { name:'BTC/USD', desc:'Bitcoin · Spot · 6 Timeframe Confluence', context:'Bitcoin (BTC/USD)', slRange:'200–400', slMax:'800', btContext:'Bitcoin trading in ~$80,000–90,000 range in April 2026.' },
+};
+
+function selectAsset(asset, btn, resetUI=true){
+  selectedAsset = asset;
+  localStorage.setItem('asset', asset);
+  document.querySelectorAll('.asset-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const meta = ASSET_META[asset];
+  document.getElementById('pairName').textContent  = meta.name;
+  document.getElementById('pairDesc').textContent   = meta.desc;
+  document.getElementById('btPairDesc').textContent = `${meta.name} · Last 3 Trading Days · Tight SL Strategy · RR 1:2+`;
+  document.getElementById('step1Text').textContent  = `Fetching live ${meta.name} price from Twelve Data…`;
+  if(resetUI){
+    document.getElementById('currentPrice').textContent = '——.——';
+    document.getElementById('priceChange').textContent  = 'Awaiting data…';
+    document.getElementById('priceChange').className    = 'price-change';
+    document.getElementById('priceMeta').textContent    = '';
+    document.getElementById('marketStats').style.display = 'none';
+    document.getElementById('analysisText').textContent = `Press SCAN MARKET to fetch live ${meta.name} data and generate a signal.`;
+  }
+}
+
 // ─── TAB / TOGGLE ─────────────────────────────────────────────────────────────
 function switchTab(n,el){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -575,7 +616,7 @@ function setStep(n, state){ // state: 'active' | 'done' | ''
 async function tdFetch(endpoint, params){
   if(!serverProviders.twelvedata) throw new Error('NO_KEY');
   const ep = endpoint.replace(/^\//, '');
-  const qs = new URLSearchParams({ ...params, symbol: 'XAU/USD', _endpoint: ep });
+  const qs = new URLSearchParams({ ...params, symbol: selectedAsset, _endpoint: ep });
   const res = await fetch(`/api/twelvedata?${qs}`);
   const data = await res.json();
   if(data.status === 'error' || data.code) throw new Error(data.message || 'Twelve Data error');
@@ -671,13 +712,13 @@ Prev Close: ${parseFloat(quote.previous_close||0).toFixed(2)}`;
 
   } catch(e) {
     if(e.message === 'NO_KEY'){
-      marketContext = `No Twelve Data key configured. Use your knowledge to estimate current XAU/USD price context (approx April 2026). Note this is simulated data.`;
+      marketContext = `No Twelve Data key configured. Use your knowledge to estimate current ${selectedAsset} price context (approx April 2026). Note this is simulated data.`;
       document.getElementById('currentPrice').textContent = 'AI EST.';
-      document.getElementById('priceChange').textContent = '(Add TD_API_KEY to Vercel for real prices)';
+      document.getElementById('priceChange').textContent = `(Add TD_API_KEY to Vercel for real ${selectedAsset} prices)`;
       document.getElementById('priceChange').className = 'price-change';
     } else {
       showError('Price Fetch Failed', `Twelve Data error: ${e.message}. Falling back to AI simulation.`);
-      marketContext = `Twelve Data unavailable (${e.message}). Estimate current XAU/USD price from context.`;
+      marketContext = `Twelve Data unavailable (${e.message}). Estimate current ${selectedAsset} price from context.`;
     }
   }
 
@@ -709,18 +750,20 @@ MACD: ${macdVal}  Signal: ${macdSig}  Histogram: ${macdHist}  |  ${parseFloat(ma
   setStep(3,'active');
 
   const priceForPrompt = livePrice ? livePrice.toFixed(2) : 'unknown — estimate from current context';
-  const prompt = `You are a professional XAU/USD scalp trader and technical analyst. Generate a precise trading signal using the real market data provided.
+  const meta = ASSET_META[selectedAsset];
+  const prompt = `You are a professional ${meta.context} scalp trader and technical analyst. Generate a precise trading signal using the real market data provided.
 
 ${marketContext}
 
 ${indicatorContext}
 
 STRATEGY RULES:
-- Tight SL: 4–6 pts from entry (primary). Max SL: 10 pts (candle boundary). TP: min 2× SL distance (RR 1:2+)
+- Tight SL: ${meta.slRange} pts from entry (primary). Max SL: ${meta.slMax} pts (candle boundary). TP: min 2× SL distance (RR 1:2+)
 - BUY: SL below entry. SELL: SL above entry.
 - Base all price levels on the REAL current price: ${priceForPrompt}
 - Generate 6 timeframe signals (1m,5m,15m,30m,1h,4h) consistent with the real indicator data
 - Current UTC: ${new Date().toUTCString()}
+- Asset: ${selectedAsset}
 - Data source: ${dataSource === 'live' ? 'REAL Twelve Data API' : 'AI simulation (no API key)'}
 
 CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT include any text before or after the JSON. Do NOT use markdown code blocks. Start your response with { and end with }.
@@ -733,11 +776,11 @@ CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT includ
   "entry":"",
   "entryNote":"At market",
   "sl":"",
-  "slNote":"-5 pts",
+  "slNote":"-${meta.slRange.split('–')[0]} pts",
   "slLow":"",
-  "slLowNote":"-9 pts | candle boundary",
+  "slLowNote":"-${meta.slMax} pts | candle boundary",
   "tp":"",
-  "tpNote":"+14 pts | RR 1:2.8",
+  "tpNote":"RR 1:2+",
   "timeframes":[
     {"signal":"BUY","score":"Strong"},
     {"signal":"BUY","score":"Strong"},
@@ -760,7 +803,7 @@ CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT includ
     "momSignal":"bullish",
     "momText":"Price above EMA50"
   },
-  "analysis":"3–4 sentence professional analysis referencing the real indicator values and explaining the signal rationale, key support/resistance, and risk context. If using simulated data, clearly note this."
+  "analysis":"3–4 sentence professional analysis of ${selectedAsset} referencing the real indicator values and explaining the signal rationale, key support/resistance, and risk context. If using simulated data, clearly note this."
 }`;
 
   try {
@@ -889,17 +932,18 @@ async function runBacktest(){
   document.getElementById('btPlaceholder').style.display='none';
   document.getElementById('btResults').style.display='none';
   document.getElementById('btProgress').style.display='block';
-  setProgress(8,'Fetching historical XAU/USD data...','&#128269; Analyzing last 3 trading days of XAU/USD...');
+  const meta = ASSET_META[selectedAsset];
+  setProgress(8,`Fetching historical ${selectedAsset} data...`,`🔍 Analyzing last 3 trading days of ${selectedAsset}...`);
 
   const days=getDays();
 
   // Try to fetch recent closing prices for context
   let priceContext = '';
   try {
-    if(tdApiKey){
+    if(serverProviders.twelvedata){
       const candles = await tdFetch('/time_series', { interval:'1day', outputsize: 5 });
       if(candles.values){
-        priceContext = `REAL RECENT DAILY CANDLES (Twelve Data):\n` +
+        priceContext = `REAL RECENT DAILY CANDLES (Twelve Data) for ${selectedAsset}:\n` +
           candles.values.slice(0,4).map(c=>
             `${c.datetime}: O=${parseFloat(c.open).toFixed(2)} H=${parseFloat(c.high).toFixed(2)} L=${parseFloat(c.low).toFixed(2)} C=${parseFloat(c.close).toFixed(2)}`
           ).join('\n');
@@ -907,20 +951,20 @@ async function runBacktest(){
     }
   } catch(e){ /* fallback to AI simulation */ }
 
-  const prompt=`You are a professional quant analyst backtesting a gold (XAU/USD) scalping strategy.
+  const prompt=`You are a professional quant analyst backtesting a ${meta.context} scalping strategy.
 
 STRATEGY RULES:
 - Signal: Multi-timeframe confluence (1m,5m,15m,30m,1h,4h) — minimum 4/6 TFs aligned
 - Entry: 15-min chart breakout/pullback signals
-- Tight SL: 4–6 points from entry (primary) | Max SL: up to 10 points
+- Tight SL: ${meta.slRange} points from entry (primary) | Max SL: up to ${meta.slMax} points
 - TP: minimum 2× SL distance (RR 1:2+)
 - Session: London+NY overlap 07:00–16:00 UTC only
 - Skip news: no trades 30min before/after major events
 
 BACKTEST PERIOD: ${days[0]}, ${days[1]}, ${days[2]}
-Asset: XAU/USD spot gold
+Asset: ${selectedAsset}
 
-${priceContext || 'Context: Gold trading in ~$3200–3350 range in April 2026. Strong bullish trend on USD weakness, geopolitical risk, and tariff fears.'}
+${priceContext || `Context: ${meta.btContext}`}
 
 Generate a realistic backtest of 12–18 trades across these 3 days with prices consistent with the data above.
 Include false breakouts and stop-outs on at least 25–35% of trades. Vary sessions realistically.
@@ -928,16 +972,16 @@ Include false breakouts and stop-outs on at least 25–35% of trades. Vary sessi
 CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT include any text before or after the JSON. Do NOT use markdown code blocks. Start your response with { and end with }.
 {
   "trades":[
-    {"id":1,"date":"${days[0]}","time":"08:30","direction":"BUY","entry":3221.40,"sl":3215.80,"tp":3232.60,"exit":3232.60,"pnl":11.20,"result":"WIN","confluence":"5/6","note":"Break of Asian high"},
-    {"id":2,"date":"${days[0]}","time":"10:15","direction":"SELL","entry":3228.90,"sl":3234.50,"tp":3217.70,"exit":3234.50,"pnl":-5.60,"result":"LOSS","confluence":"4/6","note":"Failed break, CPI spike"}
+    {"id":1,"date":"${days[0]}","time":"08:30","direction":"BUY","entry":0,"sl":0,"tp":0,"exit":0,"pnl":0,"result":"WIN","confluence":"5/6","note":"Example trade"},
+    {"id":2,"date":"${days[0]}","time":"10:15","direction":"SELL","entry":0,"sl":0,"tp":0,"exit":0,"pnl":0,"result":"LOSS","confluence":"4/6","note":"Failed break"}
   ],
   "summary":{
     "totalTrades":15,"wins":10,"losses":5,"winRate":66.7,
-    "grossProfit":112.4,"grossLoss":38.2,"netPnl":74.2,
-    "avgWin":11.24,"avgLoss":7.64,"avgRR":2.4,"profitFactor":2.94,
-    "bestTrade":22.5,"worstTrade":-9.8,"period":"${days[0]} to ${days[2]}"
+    "grossProfit":0,"grossLoss":0,"netPnl":0,
+    "avgWin":0,"avgLoss":0,"avgRR":2.4,"profitFactor":2.94,
+    "bestTrade":0,"worstTrade":0,"period":"${days[0]} to ${days[2]}"
   },
-  "insight":"2–3 sentence professional verdict on strategy performance, strengths, weaknesses, and honest edge assessment."
+  "insight":"2–3 sentence professional verdict on strategy performance for ${selectedAsset}, strengths, weaknesses, and honest edge assessment."
 }`;
 
   try{
