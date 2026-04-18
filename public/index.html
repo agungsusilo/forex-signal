@@ -45,7 +45,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 0
 .api-link{font-size:11px;color:var(--gold);text-decoration:none;opacity:0.7;}
 .api-link:hover{opacity:1;}
 
-/* DATA SOURCE BADGE */
+/* MODEL PICKER */
+.model-btn{padding:7px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all 0.2s;white-space:nowrap;}
+.model-btn:hover{border-color:rgba(201,168,76,0.4);color:var(--text);}
+.model-btn.active{background:linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.05));border-color:var(--gold);color:var(--gold);}
+.model-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.provider-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;}
+.provider-chip.ok{background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.2);color:var(--green);}
+.provider-chip.miss{background:rgba(255,71,87,0.05);border:1px solid rgba(255,71,87,0.15);color:#FF4757;}
+
+/* MODEL PICKER */
 .datasource-badge{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;}
 .datasource-badge.live-src{border-color:rgba(0,229,160,0.25);color:var(--green);}
 
@@ -246,19 +255,17 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
     </div>
   </header>
 
-  <!-- API KEY BANNER -->
+  <!-- PROVIDER + STATUS PANEL -->
   <div class="api-banner" id="apiBanner">
-    <div class="api-banner-icon">🔑</div>
+    <div class="api-banner-icon">🤖</div>
     <div class="api-banner-body">
-      <div class="api-banner-title">Twelve Data API Key (Optional — for live prices)</div>
-      <div class="api-banner-desc">
-        Your <strong style="color:var(--gold)">Anthropic key</strong> lives in <strong>Vercel → Settings → Environment Variables</strong> as <code style="background:rgba(201,168,76,0.1);padding:1px 6px;border-radius:4px;font-size:11px">ANTHROPIC_API_KEY</code> — never in the browser.<br/>
-        Optionally add your <strong style="color:var(--gold)">Twelve Data key</strong> below for real XAU/USD prices &amp; indicators (free at <a href="https://twelvedata.com" target="_blank" class="api-link">twelvedata.com</a>). You can also add it as <code style="background:rgba(201,168,76,0.1);padding:1px 6px;border-radius:4px;font-size:11px">TD_API_KEY</code> in Vercel env vars instead.
+      <div class="api-banner-title" id="bannerTitle">Loading provider status…</div>
+      <div class="api-banner-desc" id="bannerDesc">Checking which AI providers and data sources are configured in Vercel…</div>
+      <div style="margin-top:14px;">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:2px;font-family:'DM Mono',monospace;margin-bottom:8px;">SELECT AI MODEL</div>
+        <div id="modelPickerWrap" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
       </div>
-      <div class="api-key-row">
-        <input class="api-input" type="password" id="tdKeyInput" placeholder="Twelve Data API key (optional — leave blank to use AI simulation)"/>
-        <button class="api-save-btn" onclick="saveApiKey()">SAVE</button>
-      </div>
+      <div id="providerStatus" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;"></div>
     </div>
   </div>
 
@@ -303,7 +310,7 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
         <span class="ds-label">DATA SOURCES</span>
         <div class="ds-pills">
           <span class="ds-pill" id="pillTD"><span class="ds-dot"></span>TWELVE DATA</span>
-          <span class="ds-pill ai" id="pillAI"><span class="ds-dot"></span>CLAUDE AI</span>
+          <span class="ds-pill ai" id="pillAI"><span class="ds-dot"></span><span id="pillAILabel">AI MODEL</span></span>
         </div>
       </div>
 
@@ -421,7 +428,7 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
     </div>
   </div>
 
-  <div class="footer-note">&#9888; For educational purposes only. Not financial advice. Past performance does not guarantee future results.<br>Live price data provided by <a href="https://twelvedata.com" target="_blank" style="color:var(--gold);text-decoration:none;opacity:0.7">Twelve Data</a> when API key is set. AI analysis by Claude (Anthropic).</div>
+  <div class="footer-note">⚠ For educational purposes only. Not financial advice. Past performance does not guarantee future results.<br>Live price data by <a href="https://twelvedata.com" target="_blank" style="color:var(--gold);text-decoration:none;opacity:0.7">Twelve Data</a> when configured. AI by Anthropic · Google Gemini · Groq · OpenRouter.</div>
 </div>
 
 <script>
@@ -429,32 +436,109 @@ table.log tr:hover td{background:rgba(201,168,76,0.025);}
 const TFs = ['1m','5m','15m','30m','1h','4h'];
 const TD_INTERVALS = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h' };
 let autoOn=false, autoTmr=null, scanN=0;
-let tdApiKey = localStorage.getItem('td_api_key') || '';
+let tdApiKey = ''; // now loaded from server env, not localStorage
+
+// All supported models grouped by provider
+const ALL_MODELS = [
+  // Anthropic
+  { provider:'anthropic', model:'claude-haiku-4-5',       label:'Claude Haiku',   tag:'Fast · Cheap' },
+  { provider:'anthropic', model:'claude-sonnet-4-5',      label:'Claude Sonnet',  tag:'Balanced' },
+  // Gemini
+  { provider:'gemini',    model:'gemini-2.0-flash',       label:'Gemini Flash',   tag:'Free · Fast' },
+  { provider:'gemini',    model:'gemini-2.5-pro-preview-03-25', label:'Gemini Pro', tag:'Smart' },
+  // Groq
+  { provider:'groq',      model:'llama-3.3-70b-versatile',label:'Llama 3.3 70B',  tag:'Free · Fast' },
+  { provider:'groq',      model:'mixtral-8x7b-32768',     label:'Mixtral 8x7B',   tag:'Free' },
+  // OpenRouter
+  { provider:'openrouter',model:'mistralai/mistral-7b-instruct:free', label:'Mistral 7B', tag:'Free' },
+  { provider:'openrouter',model:'meta-llama/llama-3-8b-instruct:free',label:'Llama 3 8B', tag:'Free' },
+];
+
+let selectedProvider = localStorage.getItem('ai_provider') || 'anthropic';
+let selectedModel    = localStorage.getItem('ai_model')    || 'claude-haiku-4-5';
+let serverProviders  = {}; // populated on load
 
 // ─── INIT ──────────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  if(tdApiKey){ document.getElementById('tdKeyInput').value = tdApiKey; updateBannerState(); }
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadProviderStatus();
 });
 
-// ─── API KEY ───────────────────────────────────────────────────────────────────
-function saveApiKey(){
-  const td = document.getElementById('tdKeyInput').value.trim();
-  if(td){ tdApiKey = td; localStorage.setItem('td_api_key', td); }
-  else  { tdApiKey = ''; localStorage.removeItem('td_api_key'); }
-  updateBannerState();
+// ─── LOAD PROVIDER STATUS FROM SERVER ─────────────────────────────────────────
+async function loadProviderStatus(){
+  try {
+    const r = await fetch('/api/providers');
+    serverProviders = await r.json();
+  } catch(e) {
+    serverProviders = {};
+  }
+  tdApiKey = serverProviders.twelvedata ? 'env' : '';
+  renderProviderUI();
 }
 
-function updateBannerState(){
-  const banner = document.getElementById('apiBanner');
-  if(tdApiKey){
-    banner.classList.add('set');
-    banner.querySelector('.api-banner-title').textContent = '✓ Twelve Data Key Set — Live Price Mode Active';
-    document.getElementById('pillTD').classList.add('active');
+function renderProviderUI(){
+  const banner   = document.getElementById('apiBanner');
+  const title    = document.getElementById('bannerTitle');
+  const desc     = document.getElementById('bannerDesc');
+  const statusEl = document.getElementById('providerStatus');
+  const pickerEl = document.getElementById('modelPickerWrap');
+
+  // Status chips
+  const chips = [
+    { key:'anthropic',  label:'Anthropic' },
+    { key:'gemini',     label:'Gemini' },
+    { key:'groq',       label:'Groq' },
+    { key:'openrouter', label:'OpenRouter' },
+    { key:'twelvedata', label:'Twelve Data' },
+  ];
+  statusEl.innerHTML = chips.map(c =>
+    `<span class="provider-chip ${serverProviders[c.key]?'ok':'miss'}">${serverProviders[c.key]?'✓':'✗'} ${c.label}</span>`
+  ).join('');
+
+  // Banner message
+  const aiCount = ['anthropic','gemini','groq','openrouter'].filter(k=>serverProviders[k]).length;
+  if(aiCount === 0){
+    title.textContent = '⚠ No AI Provider Configured';
+    desc.textContent  = 'Add at least one key to Vercel env vars: ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY.';
+    banner.style.borderColor = 'rgba(255,71,87,0.3)';
   } else {
-    banner.classList.remove('set');
-    banner.querySelector('.api-banner-title').textContent = 'Twelve Data API Key (Optional — for live prices)';
-    document.getElementById('pillTD').classList.remove('active');
+    title.textContent = `✓ ${aiCount} AI Provider${aiCount>1?'s':''} Active${serverProviders.twelvedata?' · Live Prices Enabled':' · AI Price Simulation'}`;
+    desc.textContent  = serverProviders.twelvedata
+      ? 'Twelve Data configured — real XAU/USD prices & indicators active. Select an AI model below.'
+      : 'No Twelve Data key — AI will simulate prices. Add TD_API_KEY to Vercel env vars for real data.';
+    banner.classList.add('set');
   }
+
+  // Model picker buttons — only show models whose provider is configured
+  if(!selectedProvider || !serverProviders[selectedProvider]){
+    const first = ALL_MODELS.find(m => serverProviders[m.provider]);
+    if(first){ selectedProvider=first.provider; selectedModel=first.model; }
+  }
+
+  pickerEl.innerHTML = ALL_MODELS.map(m => {
+    const avail = !!serverProviders[m.provider];
+    const active = m.model===selectedModel && m.provider===selectedProvider;
+    return `<button class="model-btn${active?' active':''}" ${avail?'':'disabled'}
+      title="${avail?m.tag:'Provider not configured in Vercel'}"
+      onclick="selectModel('${m.provider}','${m.model}',this)">
+      ${m.label}<span style="font-size:9px;opacity:0.6;margin-left:5px">${m.tag}</span>
+    </button>`;
+  }).join('');
+
+  if(serverProviders.twelvedata){
+    document.getElementById('pillTD').classList.add('active');
+  }
+  document.getElementById('pillAI').classList.add('active');
+}
+
+function selectModel(provider, model, btn){
+  selectedProvider = provider;
+  selectedModel    = model;
+  localStorage.setItem('ai_provider', provider);
+  localStorage.setItem('ai_model',    model);
+  document.querySelectorAll('.model-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const info = ALL_MODELS.find(m=>m.model===model && m.provider===provider);
+  if(info) document.getElementById('pillAILabel').textContent = info.label.toUpperCase();
 }
 
 // ─── TAB / TOGGLE ─────────────────────────────────────────────────────────────
@@ -489,8 +573,7 @@ function setStep(n, state){ // state: 'active' | 'done' | ''
 
 // ─── TWELVE DATA HELPERS (via Vercel serverless) ─────────────────────────────
 async function tdFetch(endpoint, params){
-  if(!tdApiKey) throw new Error('NO_KEY');
-  // Strip leading slash, pass as _endpoint param to the single Vercel function
+  if(!serverProviders.twelvedata) throw new Error('NO_KEY');
   const ep = endpoint.replace(/^\//, '');
   const qs = new URLSearchParams({ ...params, symbol: 'XAU/USD', _endpoint: ep });
   const res = await fetch(`/api/twelvedata?${qs}`);
@@ -545,7 +628,7 @@ async function runScan(){
 
   // ── STEP 1: Live Price ─────────────────────────────────────────────────────
   try {
-    if(!tdApiKey) throw new Error('NO_KEY');
+    if(!serverProviders.twelvedata) throw new Error('NO_KEY');
     quote = await fetchQuote();
     livePrice = parseFloat(quote.close);
     const change = parseFloat(quote.change).toFixed(2);
@@ -588,13 +671,13 @@ Prev Close: ${parseFloat(quote.previous_close||0).toFixed(2)}`;
 
   } catch(e) {
     if(e.message === 'NO_KEY'){
-      marketContext = `No API key set. Use your knowledge and web search to determine the most recent XAU/USD spot price and market context (approx April 2026). Clearly note in the analysis that this is simulated/estimated data.`;
-      document.getElementById('currentPrice').textContent = 'LIVE EST.';
-      document.getElementById('priceChange').textContent = '(Set Twelve Data key for real prices)';
+      marketContext = `No Twelve Data key configured. Use your knowledge to estimate current XAU/USD price context (approx April 2026). Note this is simulated data.`;
+      document.getElementById('currentPrice').textContent = 'AI EST.';
+      document.getElementById('priceChange').textContent = '(Add TD_API_KEY to Vercel for real prices)';
       document.getElementById('priceChange').className = 'price-change';
     } else {
       showError('Price Fetch Failed', `Twelve Data error: ${e.message}. Falling back to AI simulation.`);
-      marketContext = `Twelve Data unavailable (${e.message}). Use web search for current XAU/USD price and context.`;
+      marketContext = `Twelve Data unavailable (${e.message}). Estimate current XAU/USD price from context.`;
     }
   }
 
@@ -602,7 +685,7 @@ Prev Close: ${parseFloat(quote.previous_close||0).toFixed(2)}`;
   setStep(2,'active');
   let indicatorContext = '';
   try {
-    if(!tdApiKey) throw new Error('NO_KEY');
+    if(!serverProviders.twelvedata) throw new Error('NO_KEY');
     const indData = await fetchMultiTFIndicators();
     const rsi = parseFloat(indData.rsi1h.rsi).toFixed(1);
     const ema20 = parseFloat(indData.ema20_1h.ema).toFixed(2);
@@ -682,22 +765,22 @@ CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT includ
 
   try {
     setStep(4,'active');
-    const r = await fetch("/api/anthropic", {
+    const r = await fetch("/api/ai", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-5",
-        max_tokens:1200,
-        messages:[{ role:"user", content:prompt }]
+        provider: selectedProvider,
+        model:    selectedModel,
+        max_tokens: 1200,
+        prompt: prompt
       })
     });
     const data = await r.json();
-    if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    let raw = '';
-    for(const b of (data.content||[])){ if(b.type==='text') raw += b.text; }
+    if(data.error) throw new Error(data.error);
+    let raw = data.text || '';
     raw = raw.replace(/```json[\s\S]*?```/g, m => m.replace(/```json|```/g,'')).replace(/```/g,'').trim();
     const m = raw.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error('No JSON in response — API said: ' + raw.slice(0,200));
+    if(!m) throw new Error('No JSON in response — model said: ' + raw.slice(0,200));
     const parsed = JSON.parse(m[0]);
 
     // If real data, override price fields
@@ -718,7 +801,8 @@ CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT includ
 
     setStep(4,'done');
     updateUI(parsed);
-    document.getElementById('lastUpdate').textContent = `Last scan: ${new Date().toLocaleTimeString()} · Scan #${scanN} · ${dataSource === 'live' ? '🟢 Twelve Data' : '🟡 AI Simulated'}`;
+    const info = ALL_MODELS.find(m=>m.model===selectedModel);
+    document.getElementById('lastUpdate').textContent = `Last scan: ${new Date().toLocaleTimeString()} · Scan #${scanN} · ${dataSource === 'live' ? '🟢 Twelve Data' : '🟡 AI Simulated'} · ${info?info.label:selectedModel}`;
     setLive('live','LIVE');
 
   } catch(e) {
@@ -858,23 +942,23 @@ CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT includ
 
   try{
     setProgress(30,'AI reconstructing intraday price action…');
-    const r=await fetch("/api/anthropic",{
+    const r=await fetch("/api/ai",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        model:"claude-sonnet-4-5",
-        max_tokens:4096,
-        messages:[{role:"user",content:prompt}]
+        provider: selectedProvider,
+        model:    selectedModel,
+        max_tokens: 4096,
+        prompt: prompt
       })
     });
     setProgress(70,'Processing trades and calculating statistics…');
     const data=await r.json();
-    if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    let raw='';
-    for(const b of(data.content||[])){if(b.type==='text')raw+=b.text;}
+    if(data.error) throw new Error(data.error);
+    let raw=data.text||'';
     raw=raw.replace(/```json[\s\S]*?```/g, m => m.replace(/```json|```/g,'')).replace(/```/g,'').trim();
     const m=raw.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error('No JSON in response — API said: ' + raw.slice(0,200));
+    if(!m) throw new Error('No JSON in response — model said: ' + raw.slice(0,200));
     setProgress(90,'Rendering equity curve and trade log…');
     const bt=JSON.parse(m[0]);
     setTimeout(()=>renderBT(bt),500);
