@@ -640,7 +640,7 @@ STRATEGY RULES:
 - Current UTC: ${new Date().toUTCString()}
 - Data source: ${dataSource === 'live' ? 'REAL Twelve Data API' : 'AI simulation (no API key)'}
 
-Return ONLY valid JSON, no markdown, no extra text:
+CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT include any text before or after the JSON. Do NOT use markdown code blocks. Start your response with { and end with }.
 {
   "price":"${livePrice ? livePrice.toFixed(2) : ''}",
   "change":"",
@@ -682,23 +682,22 @@ Return ONLY valid JSON, no markdown, no extra text:
 
   try {
     setStep(4,'active');
-    const tools = [{ type:"web_search_20250305", name:"web_search" }];
     const r = await fetch("/api/anthropic", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-5",
         max_tokens:1200,
-        tools: dataSource === 'simulated' ? tools : [],
         messages:[{ role:"user", content:prompt }]
       })
     });
     const data = await r.json();
+    if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     let raw = '';
     for(const b of (data.content||[])){ if(b.type==='text') raw += b.text; }
-    raw = raw.replace(/```json|```/g,'').trim();
+    raw = raw.replace(/```json[\s\S]*?```/g, m => m.replace(/```json|```/g,'')).replace(/```/g,'').trim();
     const m = raw.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error('No JSON in response');
+    if(!m) throw new Error('No JSON in response — API said: ' + raw.slice(0,200));
     const parsed = JSON.parse(m[0]);
 
     // If real data, override price fields
@@ -842,7 +841,7 @@ ${priceContext || 'Context: Gold trading in ~$3200–3350 range in April 2026. S
 Generate a realistic backtest of 12–18 trades across these 3 days with prices consistent with the data above.
 Include false breakouts and stop-outs on at least 25–35% of trades. Vary sessions realistically.
 
-Respond ONLY with valid JSON, no markdown:
+CRITICAL: Your ENTIRE response must be a single valid JSON object. Do NOT include any text before or after the JSON. Do NOT use markdown code blocks. Start your response with { and end with }.
 {
   "trades":[
     {"id":1,"date":"${days[0]}","time":"08:30","direction":"BUY","entry":3221.40,"sl":3215.80,"tp":3232.60,"exit":3232.60,"pnl":11.20,"result":"WIN","confluence":"5/6","note":"Break of Asian high"},
@@ -865,17 +864,17 @@ Respond ONLY with valid JSON, no markdown:
       body:JSON.stringify({
         model:"claude-sonnet-4-5",
         max_tokens:4096,
-        tools: tdApiKey ? [] : [{type:"web_search_20250305",name:"web_search"}],
         messages:[{role:"user",content:prompt}]
       })
     });
     setProgress(70,'Processing trades and calculating statistics…');
     const data=await r.json();
+    if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     let raw='';
     for(const b of(data.content||[])){if(b.type==='text')raw+=b.text;}
-    raw=raw.replace(/```json|```/g,'').trim();
+    raw=raw.replace(/```json[\s\S]*?```/g, m => m.replace(/```json|```/g,'')).replace(/```/g,'').trim();
     const m=raw.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error('No JSON in response');
+    if(!m) throw new Error('No JSON in response — API said: ' + raw.slice(0,200));
     setProgress(90,'Rendering equity curve and trade log…');
     const bt=JSON.parse(m[0]);
     setTimeout(()=>renderBT(bt),500);
